@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CloudTales.Narrator.Cli/CloudTales.Narrator.Cli.csproj" />
+    <Project Path="src/CloudTales.Narrator.Core/CloudTales.Narrator.Core.csproj" />
+  </Folder>
+</Solution>

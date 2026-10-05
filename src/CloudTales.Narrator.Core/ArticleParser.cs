@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
-namespace CloudTales.Narrator.Cli;
+namespace CloudTales.Narrator.Core;
 
 /// <summary>A narratable unit of an article, in reading order.</summary>
 public abstract record ArticleBlock;

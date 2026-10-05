@@ -1,7 +1,7 @@
 using System.Security;
 using System.Text;
 
-namespace CloudTales.Narrator.Cli;
+namespace CloudTales.Narrator.Core;
 
 /// <summary>
 /// Turns article blocks into SSML documents, each small enough for one real-time synthesis call

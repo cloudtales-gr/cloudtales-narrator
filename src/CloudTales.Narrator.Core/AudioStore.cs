@@ -5,7 +5,7 @@ using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
-namespace CloudTales.Narrator.Cli;
+namespace CloudTales.Narrator.Core;
 
 /// <summary>
 /// Stores narration MP3s in Blob Storage, one blob per post slug, tagged with a hash of the SSML

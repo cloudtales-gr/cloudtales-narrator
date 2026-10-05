@@ -6,7 +6,7 @@ using Microsoft.CognitiveServices.Speech;
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
 
-// Usage: dotnet run -- --slug <slug-or-url> [--dryRun true]
+// Usage: dotnet run -- --slug <slug-or-url> [--dryRun true] [--force true]
 var config = new ConfigurationBuilder()
     .AddUserSecrets<Program>()
     .AddCommandLine(args)
@@ -15,9 +15,11 @@ var config = new ConfigurationBuilder()
 var slug = (config["slug"] ?? throw new ArgumentException("Missing --slug <wordpress-post-slug>."))
     .TrimEnd('/').Split('/')[^1];
 var dryRun = bool.TryParse(config["dryRun"], out var d) && d;
+var force = bool.TryParse(config["force"], out var f) && f;
 var resourceId = config["Speech:ResourceId"] ?? throw new InvalidOperationException("Missing user secret Speech:ResourceId.");
 var region = config["Speech:Region"] ?? "westeurope";
 var voice = config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural";
+var blobEndpoint = config["Storage:BlobEndpoint"] ?? throw new InvalidOperationException("Missing user secret Storage:BlobEndpoint.");
 
 // 1. Fetch the post from the WordPress REST API
 using var http = new HttpClient { BaseAddress = new Uri("https://cloudtales.gr/") };
@@ -45,15 +47,30 @@ if (dryRun)
     return 0;
 }
 
-// 3. Authenticate with Entra ID — no keys
-var credential = new DefaultAzureCredential();
+// 3. One Entra ID credential for both Speech and Storage — no keys anywhere.
+//    Explicit per environment: Managed Identity in Azure (App Service/Functions set WEBSITE_SITE_NAME),
+//    Azure CLI login on a dev machine. Avoids DefaultAzureCredential probing IMDS from a laptop.
+TokenCredential credential = Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") is not null
+    ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+    : new AzureCliCredential();
+
+// 4. Skip synthesis when the stored audio was built from identical SSML
+var store = new AudioStore(new Uri(blobEndpoint), credential);
+var hash = AudioStore.ComputeHash(chunks);
+
+if (!force && await store.FindCurrentAsync(slug, hash) is { } existing)
+{
+    Console.WriteLine($"Unchanged since last synthesis, skipping (no cost): {existing}");
+    return 0;
+}
+
 var token = await credential.GetTokenAsync(
-    new TokenRequestContext(["https://cognitiveservices.azure.com/.default"]));
+    new TokenRequestContext(["https://cognitiveservices.azure.com/.default"]), default);
 
 var speechConfig = SpeechConfig.FromAuthorizationToken($"aad#{resourceId}#{token.Token}", region);
 speechConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Audio24Khz96KBitRateMonoMp3);
 
-// 4. Synthesize each chunk and concatenate the MP3 frames (same format → valid stream)
+// 5. Synthesize each chunk and concatenate the MP3 frames (same format → valid stream)
 using var synthesizer = new SpeechSynthesizer(speechConfig, null);
 using var audio = new MemoryStream();
 var total = TimeSpan.Zero;
@@ -74,9 +91,9 @@ for (var i = 0; i < chunks.Count; i++)
     Console.WriteLine($"  chunk {i + 1}/{chunks.Count}: {result.AudioDuration:mm\\:ss}");
 }
 
-var mp3Path = Path.GetFullPath($"{slug}.mp3");
-await File.WriteAllBytesAsync(mp3Path, audio.ToArray());
-Console.WriteLine($"Saved {mp3Path} ({total:mm\\:ss})");
+// 6. Upload to Blob Storage with the SSML hash as metadata
+var url = await store.UploadAsync(slug, hash, audio);
+Console.WriteLine($"Uploaded ({total:mm\\:ss}): {url}");
 return 0;
 
 internal sealed record WpPost(int Id, WpRendered Title, WpRendered Content, DateTime Modified);

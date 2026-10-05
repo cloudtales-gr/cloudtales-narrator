@@ -8,26 +8,26 @@ It is also a reference for a **zero-key architecture** on Azure: no storage acco
 
 ```mermaid
 flowchart LR
-    WP[WordPress<br/>REST API]
-    subgraph Function App - Flex Consumption, system-assigned identity
-        T[EnqueueChangedArticles<br/>timer, daily]
-        N[NarrateArticle<br/>queue trigger]
-        G[GetAudio<br/>HTTP]
+    WP["WordPress REST API"]
+    subgraph FA["Function App (Flex Consumption, system-assigned identity)"]
+        T["EnqueueChangedArticles<br/>timer, daily"]
+        N["NarrateArticle<br/>queue trigger"]
+        G["GetAudio<br/>HTTP"]
     end
-    Q[(narration-requests<br/>queue)]
-    S[Azure AI Speech<br/>local auth disabled]
-    B[(Audio storage<br/>private, no shared keys)]
-    R[Reader's browser<br/>on cloudtales.gr]
+    Q[("narration-requests<br/>queue")]
+    S["Azure AI Speech<br/>local auth disabled"]
+    B[("Audio storage<br/>private, no shared keys")]
+    R["Reader's browser<br/>on cloudtales.gr"]
 
-    T -- reads posts --> WP
-    T -- hash check --> B
-    T -- one message per changed post --> Q
+    T -->|"reads posts"| WP
+    T -->|"hash check"| B
+    T -->|"one message per changed post"| Q
     Q --> N
-    N -- SSML chunks --> S
-    N -- MP3 + SSML hash --> B
-    R -- /api/audio/slug + Referer --> G
-    G -- 302 to 2-hour user delegation SAS --> R
-    R -- range requests --> B
+    N -->|"SSML chunks"| S
+    N -->|"MP3 + SSML hash"| B
+    R -->|"/api/audio/slug + Referer"| G
+    G -->|"302 to 2-hour user delegation SAS"| R
+    R -->|"range requests"| B
 ```
 
 1. **Daily check (seconds).** `EnqueueChangedArticles` reads all published posts, builds the SSML for each, and compares its SHA-256 hash with the hash stored on the existing MP3. Only new or changed posts are queued, up to a daily cap.

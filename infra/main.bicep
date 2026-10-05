@@ -72,6 +72,7 @@ resource audioStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false   // playback only via short-lived user delegation SAS
     allowSharedKeyAccess: false    // forces Entra ID for data access and SAS signing
+    defaultToOAuthAuthentication: true // the portal uses Entra ID, not keys
   }
 
   resource blobService 'blobServices' = {
@@ -98,6 +99,7 @@ resource hostStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true // the portal uses Entra ID, not keys
   }
 
   resource blobService 'blobServices' = {

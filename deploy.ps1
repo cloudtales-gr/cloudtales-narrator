@@ -1,17 +1,27 @@
 <#
 .SYNOPSIS
   Builds the Functions project and deploys it to the Flex Consumption Function App.
+.PARAMETER ResourceGroup
+  Resource group the infrastructure (infra/main.bicep) was deployed to.
+.PARAMETER FunctionApp
+  Function App name. If omitted, it is read from the 'main' deployment's outputs.
 .NOTES
   The zip is built entry by entry with '/' separators: Windows PowerShell's Compress-Archive
   and ZipFile.CreateFromDirectory write '\', which Linux hosts do not treat as folders.
 #>
 param(
-    [string]$ResourceGroup = "rg-cloudtales-tts",
-    [string]$FunctionApp   = "func-cloudtales-narrator-nwdwpxyw52omi"
+    [Parameter(Mandatory)]
+    [string]$ResourceGroup,
+    [string]$FunctionApp
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+if (-not $FunctionApp) {
+    $FunctionApp = az deployment group show -g $ResourceGroup -n main --query properties.outputs.functionAppName.value -o tsv
+    if (-not $FunctionApp) { throw "Function App name not found; pass -FunctionApp or deploy infra/main.bicep first." }
+}
 
 $publishDir = Join-Path $PSScriptRoot "publish"
 $zipPath    = Join-Path $PSScriptRoot "publish.zip"

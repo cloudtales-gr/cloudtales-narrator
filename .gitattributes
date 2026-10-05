@@ -1,0 +1,11 @@
+* text=auto
+*.cs     text eol=lf
+*.csproj text eol=lf
+*.slnx   text eol=lf
+*.json   text eol=lf
+*.bicep  text eol=lf
+*.md     text eol=lf
+*.php    text eol=lf
+*.css    text eol=lf
+*.ps1    text eol=crlf
+*.mp3    binary

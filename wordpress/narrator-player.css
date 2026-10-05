@@ -1,0 +1,5 @@
+/* CloudTales Narrator player — paste into Appearance → Customize → Additional CSS */
+.ct-listen[hidden] { display: none !important; }
+.ct-listen { margin: 0 0 2rem; }
+.ct-listen figcaption { font-weight: 600; margin-bottom: .5rem; }
+.ct-listen audio { width: 100%; }

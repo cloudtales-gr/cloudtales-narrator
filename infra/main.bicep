@@ -1,18 +1,26 @@
-// CloudTales Narrator: daily Azure Function that narrates blog posts.
-// Keyless by design: every service-to-service call uses the Function's managed identity.
+// CloudTales Narrator: every Azure resource for narrating blog posts with Azure Speech.
+// Zero keys by design: no account keys, no connection-string secrets, no API keys anywhere.
+// Every service-to-service call is authenticated with Microsoft Entra ID.
 targetScope = 'resourceGroup'
 
-@description('Azure region for all new resources.')
+@description('Azure region for all resources. The voice must be available here.')
 param location string = resourceGroup().location
 
-@description('Existing Speech resource (must have a custom domain for Entra ID auth).')
-param speechAccountName string
+@description('Speech resource name. Also its custom subdomain, so it must be globally unique.')
+param speechAccountName string = 'speech-narrator-${uniqueString(resourceGroup().id)}'
 
-@description('Existing storage account holding the narration MP3s.')
-param audioStorageAccountName string
+@description('Speech pricing tier. F0 is free but limited to one per subscription.')
+@allowed(['F0', 'S0'])
+param speechSku string = 'S0'
+
+@description('Storage account that holds the narration MP3s (3-24 lowercase letters/digits).')
+param audioStorageAccountName string = 'staudio${uniqueString(resourceGroup().id)}'
 
 @description('Neural voice used for narration.')
 param voice string = 'en-US-Andrew:DragonHDLatestNeural'
+
+@description('Base URL of the WordPress site whose posts are narrated.')
+param wordPressBaseUrl string = 'https://cloudtales.gr/'
 
 @description('Hosts allowed to play the audio (checked against Referer/Origin).')
 param allowedAudioHosts string = 'cloudtales.gr,www.cloudtales.gr'
@@ -20,6 +28,9 @@ param allowedAudioHosts string = 'cloudtales.gr,www.cloudtales.gr'
 @description('Cost guardrail: maximum articles queued for synthesis per day.')
 @minValue(1)
 param maxSynthesesPerRun int = 3
+
+@description('Optional: Entra object ID of a developer who runs the CLI locally. Leave empty to skip.')
+param developerPrincipalId string = ''
 
 var suffix = uniqueString(resourceGroup().id)
 var functionAppName = 'func-cloudtales-narrator-${suffix}'
@@ -35,14 +46,44 @@ var roles = {
   monitoringMetricsPublisher: '3913510d-42f4-4e42-8a64-420c390055eb'
 }
 
-// ---------- Existing resources (created in steps 1 and 4) ----------
+// ---------- Speech: Entra ID only (local/key auth disabled) ----------
 
-resource speech 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+resource speech 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: speechAccountName
+  location: location
+  kind: 'SpeechServices'
+  sku: { name: speechSku }
+  properties: {
+    customSubDomainName: speechAccountName // required for Entra ID token auth
+    disableLocalAuth: true                 // the resource's keys stop working
+    publicNetworkAccess: 'Enabled'
+  }
 }
 
-resource audioStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+// ---------- Audio storage: private container, no shared keys ----------
+
+resource audioStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: audioStorageAccountName
+  location: location
+  kind: 'StorageV2'
+  sku: { name: 'Standard_LRS' }
+  properties: {
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+    allowBlobPublicAccess: false   // playback only via short-lived user delegation SAS
+    allowSharedKeyAccess: false    // forces Entra ID for data access and SAS signing
+  }
+
+  resource blobService 'blobServices' = {
+    name: 'default'
+
+    resource audioContainer 'containers' = {
+      name: 'audio'
+      properties: {
+        publicAccess: 'None'
+      }
+    }
+  }
 }
 
 // ---------- Function host storage: no keys, no public access ----------
@@ -160,6 +201,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Storage__BlobEndpoint', value: audioStorage.properties.primaryEndpoints.blob }
         { name: 'Narrator__MaxSynthesesPerRun', value: string(maxSynthesesPerRun) }
         { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
+        { name: 'WordPress__BaseUrl', value: wordPressBaseUrl }
       ]
     }
   }
@@ -219,5 +261,29 @@ resource telemetryPublisher 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
+// ---------- Optional: local developer access for the CLI ----------
+
+resource devSpeechUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(developerPrincipalId)) {
+  name: guid(speech.id, developerPrincipalId, roles.speechUser)
+  scope: speech
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.speechUser)
+    principalId: developerPrincipalId
+    principalType: 'User'
+  }
+}
+
+resource devAudioContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(developerPrincipalId)) {
+  name: guid(audioStorage.id, developerPrincipalId, roles.storageBlobDataContributor)
+  scope: audioStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.storageBlobDataContributor)
+    principalId: developerPrincipalId
+    principalType: 'User'
+  }
+}
+
 output functionAppName string = functionApp.name
-output hostStorageName string = hostStorage.name
+output audioEndpoint string = 'https://${functionApp.name}.azurewebsites.net/api/audio/'
+output speechResourceId string = speech.id
+output audioBlobEndpoint string = audioStorage.properties.primaryEndpoints.blob

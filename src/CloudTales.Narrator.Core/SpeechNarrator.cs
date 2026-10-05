@@ -11,8 +11,20 @@ public sealed class SpeechNarrator(TokenCredential credential, string resourceId
 {
     private static readonly TokenRequestContext Scope = new(["https://cognitiveservices.azure.com/.default"]);
 
+    private const int MaxAttemptsPerChunk = 3;
+
+    // Errors worth retrying in place; anything else (auth, bad SSML) fails immediately
+    private static readonly CancellationErrorCode[] TransientErrors =
+    [
+        CancellationErrorCode.ServiceTimeout,
+        CancellationErrorCode.ServiceUnavailable,
+        CancellationErrorCode.ConnectionFailure,
+        CancellationErrorCode.TooManyRequests
+    ];
+
     /// <summary>
     /// Synthesizes each chunk in order and concatenates the MP3 frames (same format → valid stream).
+    /// Transient service errors are retried per chunk, so chunks already synthesized are never re-billed.
     /// The caller owns the returned stream.
     /// </summary>
     public async Task<(MemoryStream Audio, TimeSpan Duration)> SynthesizeAsync(
@@ -32,18 +44,28 @@ public sealed class SpeechNarrator(TokenCredential credential, string resourceId
         {
             for (var i = 0; i < ssmlChunks.Count; i++)
             {
-                ct.ThrowIfCancellationRequested();
-                using var result = await synthesizer.SpeakSsmlAsync(ssmlChunks[i]);
-
-                if (result.Reason == ResultReason.Canceled)
+                for (var attempt = 1; ; attempt++)
                 {
-                    var d = SpeechSynthesisCancellationDetails.FromResult(result);
-                    throw new SpeechSynthesisException(
-                        $"Chunk {i + 1}/{ssmlChunks.Count} canceled: {d.Reason} | {d.ErrorCode} | {d.ErrorDetails}");
-                }
+                    ct.ThrowIfCancellationRequested();
+                    using var result = await synthesizer.SpeakSsmlAsync(ssmlChunks[i]);
 
-                await audio.WriteAsync(result.AudioData, ct);
-                total += result.AudioDuration;
+                    if (result.Reason != ResultReason.Canceled)
+                    {
+                        await audio.WriteAsync(result.AudioData, ct);
+                        total += result.AudioDuration;
+                        break;
+                    }
+
+                    var d = SpeechSynthesisCancellationDetails.FromResult(result);
+                    if (attempt >= MaxAttemptsPerChunk || !TransientErrors.Contains(d.ErrorCode))
+                    {
+                        throw new SpeechSynthesisException(
+                            $"Chunk {i + 1}/{ssmlChunks.Count} canceled after {attempt} attempt(s): {d.Reason} | {d.ErrorCode} | {d.ErrorDetails}");
+                    }
+
+                    // Back off before retrying only this chunk; earlier chunks are kept, not re-billed
+                    await Task.Delay(TimeSpan.FromSeconds(5 * attempt), ct);
+                }
             }
         }
         catch

@@ -21,6 +21,10 @@ public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator,
     public IReadOnlyList<string> BuildSsml(Article article) =>
         SsmlBuilder.Build(article.Title, ArticleParser.Parse(article.Html), voice);
 
+    /// <summary>True when the stored audio is missing or was built from different SSML. No Speech cost.</summary>
+    public async Task<bool> NeedsSynthesisAsync(Article article, CancellationToken ct = default) =>
+        await store.FindCurrentAsync(article.Slug, AudioStore.ComputeHash(BuildSsml(article)), ct) is null;
+
     /// <summary>Synthesizes and uploads the article unless identical audio is already stored.</summary>
     public async Task<NarrationResult> ProcessAsync(Article article, bool force = false, CancellationToken ct = default)
     {

@@ -14,7 +14,10 @@ param audioStorageAccountName string
 @description('Neural voice used for narration.')
 param voice string = 'en-US-Andrew:DragonHDLatestNeural'
 
-@description('Cost guardrail: maximum articles synthesized per daily run.')
+@description('Hosts allowed to play the audio (checked against Referer/Origin).')
+param allowedAudioHosts string = 'cloudtales.gr,www.cloudtales.gr'
+
+@description('Cost guardrail: maximum articles queued for synthesis per day.')
 @minValue(1)
 param maxSynthesesPerRun int = 3
 
@@ -27,6 +30,7 @@ var deploymentContainerName = 'app-package'
 var roles = {
   storageBlobDataOwner: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+  storageQueueDataContributor: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
   speechUser: 'f2dc8367-1007-4938-bd23-fe263f013447'
   monitoringMetricsPublisher: '3913510d-42f4-4e42-8a64-420c390055eb'
 }
@@ -60,6 +64,15 @@ resource hostStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 
     resource deploymentContainer 'containers' = {
       name: deploymentContainerName
+    }
+  }
+
+  // One message per post to narrate; the poison queue is created by the runtime on first failure
+  resource queueService 'queueServices' = {
+    name: 'default'
+
+    resource narrationQueue 'queues' = {
+      name: 'narration-requests'
     }
   }
 }
@@ -146,6 +159,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Speech__Voice', value: voice }
         { name: 'Storage__BlobEndpoint', value: audioStorage.properties.primaryEndpoints.blob }
         { name: 'Narrator__MaxSynthesesPerRun', value: string(maxSynthesesPerRun) }
+        { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
       ]
     }
   }
@@ -163,6 +177,18 @@ resource hostStorageOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   }
 }
 
+// Timer writes and queue trigger reads the narration queue (AzureWebJobsStorage connection)
+resource hostQueueContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(hostStorage.id, functionApp.id, roles.storageQueueDataContributor)
+  scope: hostStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.storageQueueDataContributor)
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Also covers generating user delegation keys for the playback SAS links
 resource audioStorageContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(audioStorage.id, functionApp.id, roles.storageBlobDataContributor)
   scope: audioStorage

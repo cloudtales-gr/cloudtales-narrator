@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/CloudTales.Narrator.Cli/CloudTales.Narrator.Cli.csproj" />
     <Project Path="src/CloudTales.Narrator.Core/CloudTales.Narrator.Core.csproj" />
+    <Project Path="src/CloudTales.Narrator.Functions/CloudTales.Narrator.Functions.csproj" />
   </Folder>
 </Solution>

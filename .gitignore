@@ -484,3 +484,6 @@ $RECYCLE.BIN/
 *.mp3
 
 *.ssml.txt
+
+publish/
+publish.zip

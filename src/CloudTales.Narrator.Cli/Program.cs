@@ -1,7 +1,10 @@
 using CloudTales.Narrator.Core;
 using Microsoft.Extensions.Configuration;
 
-// Usage: dotnet run -- --slug <slug-or-url> [--dryRun true] [--force true]
+// Usage: dotnet run -- --slug <slug-or-url> [--dryRun true] [--check true] [--force true]
+//   --dryRun  writes the SSML only; no Azure calls, no cost
+//   --check   compares the SSML hash with the stored audio; Storage only, no Speech cost
+//   --force   re-synthesizes even when the stored audio is current
 var config = new ConfigurationBuilder()
     .AddUserSecrets<Program>()
     .AddCommandLine(args)
@@ -9,24 +12,26 @@ var config = new ConfigurationBuilder()
 
 var slug = (config["slug"] ?? throw new ArgumentException("Missing --slug <wordpress-post-slug>."))
     .TrimEnd('/').Split('/')[^1];
-var dryRun = bool.TryParse(config["dryRun"], out var d) && d;
-var force = bool.TryParse(config["force"], out var f) && f;
-var resourceId = config["Speech:ResourceId"] ?? throw new InvalidOperationException("Missing user secret Speech:ResourceId.");
-var region = config["Speech:Region"] ?? "westeurope";
-var voice = config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural";
-var blobEndpoint = config["Storage:BlobEndpoint"] ?? throw new InvalidOperationException("Missing user secret Storage:BlobEndpoint.");
+var dryRun = Flag("dryRun");
+var check = Flag("check");
+var force = Flag("force");
 
-using var http = new HttpClient { BaseAddress = new Uri("https://cloudtales.gr/") };
-http.DefaultRequestHeaders.UserAgent.ParseAdd("CloudTales-Narrator/0.2");
+var ssml = new SsmlOptions(
+    Voice: config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural",
+    SiteName: Required("Narrator:SiteName"),
+    SpokenAddress: Required("Narrator:SpokenAddress"));
+
+using var http = new HttpClient { BaseAddress = new Uri(Required("WordPress:BaseUrl")) };
+http.DefaultRequestHeaders.UserAgent.ParseAdd("WordPress-Narrator/1.0");
 
 var article = await new WordPressClient(http).GetBySlugAsync(slug)
     ?? throw new InvalidOperationException($"No post found with slug '{slug}'.");
 
 var credential = NarratorCredential.Create();
 var pipeline = new NarrationPipeline(
-    new AudioStore(new Uri(blobEndpoint), credential),
-    new SpeechNarrator(credential, resourceId, region),
-    voice);
+    new AudioStore(new Uri(Required("Storage:BlobEndpoint")), credential),
+    new SpeechNarrator(credential, Required("Speech:ResourceId"), Required("Speech:Region")),
+    ssml);
 
 var chunks = pipeline.BuildSsml(article);
 var ssmlPath = Path.GetFullPath($"{slug}.ssml.txt");
@@ -41,6 +46,14 @@ if (dryRun)
     return 0;
 }
 
+if (check)
+{
+    Console.WriteLine(await pipeline.NeedsSynthesisAsync(article)
+        ? "Hash differs: this post WOULD be re-synthesized."
+        : "Unchanged: the SSML hash matches the stored audio.");
+    return 0;
+}
+
 var result = await pipeline.ProcessAsync(article, force);
 Console.WriteLine(result.Outcome switch
 {
@@ -48,3 +61,10 @@ Console.WriteLine(result.Outcome switch
     _ => $"Synthesized {result.Duration?.ToString(@"mm\:ss")} in {result.Chunks} chunk(s), uploaded: {result.AudioUrl}"
 });
 return 0;
+
+bool Flag(string name) => bool.TryParse(config[name], out var value) && value;
+
+string Required(string key) =>
+    config[key] is { Length: > 0 } value
+        ? value
+        : throw new InvalidOperationException($"Missing user secret '{key}' (dotnet user-secrets set \"{key}\" <value>).");

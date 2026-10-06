@@ -9,7 +9,7 @@ namespace CloudTales.Narrator.Functions;
 
 /// <summary>
 /// GET /api/audio/{slug}: the only way to play an MP3. The container is private; this endpoint
-/// checks that the request comes from a page on the blog and redirects to a 2-hour, read-only SAS link.
+/// checks that the request comes from a page on an allowed site and redirects to a 2-hour, read-only SAS link.
 /// Blocks hotlinking and direct access; it is not DRM (a listener can always save what they hear).
 /// </summary>
 public sealed partial class GetAudio(AudioStore store, IConfiguration config)
@@ -38,7 +38,7 @@ public sealed partial class GetAudio(AudioStore store, IConfiguration config)
     /// <summary>Browsers send Referer (or Origin) with the blog's host when an audio tag on its pages loads.</summary>
     private bool IsFromAllowedSite(HttpRequestData req)
     {
-        var allowedHosts = (config["Audio:AllowedHosts"] ?? "cloudtales.gr,www.cloudtales.gr")
+        var allowedHosts = (config["Audio:AllowedHosts"] ?? string.Empty) // validated at startup in Program.cs
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         foreach (var header in new[] { "Referer", "Origin" })

@@ -3,6 +3,12 @@ using System.Text;
 
 namespace CloudTales.Narrator.Core;
 
+/// <summary>Voice plus the site-specific words of the spoken intro and outro.</summary>
+/// <param name="Voice">Azure neural voice name, e.g. en-US-Andrew:DragonHDLatestNeural.</param>
+/// <param name="SiteName">How the intro names the site: "...the audio version of this {SiteName} article."</param>
+/// <param name="SpokenAddress">How the outro reads the address aloud, e.g. "example dot com".</param>
+public sealed record SsmlOptions(string Voice, string SiteName, string SpokenAddress);
+
 /// <summary>
 /// Turns article blocks into SSML documents, each small enough for one real-time synthesis call
 /// (the service caps real-time output at 10 minutes of audio per request).
@@ -16,14 +22,14 @@ public static class SsmlBuilder
     public static IReadOnlyList<string> Build(
         string title,
         IReadOnlyList<ArticleBlock> blocks,
-        string voice,
+        SsmlOptions options,
         int maxCharsPerChunk = DefaultMaxCharsPerChunk)
     {
         List<string> fragments =
         [
-            $"""{Esc(title)}.<break time="700ms"/>This is the audio version of this CloudTales article.<break time="1s"/>""",
+            $"""{Esc(title)}.<break time="700ms"/>This is the audio version of this {Esc(options.SiteName)} article.<break time="1s"/>""",
             .. blocks.Select(ToFragment),
-            """<break time="1s"/>Thanks for listening. The full article, including code examples and diagrams, is on CloudTales dot G R."""
+            $"""<break time="1s"/>Thanks for listening. The full article, including code examples and diagrams, is on {Esc(options.SpokenAddress)}."""
         ];
 
         var chunks = new List<string>();
@@ -34,13 +40,13 @@ public static class SsmlBuilder
             // Split only between fragments, so no sentence is ever cut in half
             if (current.Length > 0 && current.Length + fragment.Length > maxCharsPerChunk)
             {
-                chunks.Add(Wrap(current.ToString(), voice));
+                chunks.Add(Wrap(current.ToString(), options.Voice));
                 current.Clear();
             }
             current.Append(fragment);
         }
 
-        if (current.Length > 0) chunks.Add(Wrap(current.ToString(), voice));
+        if (current.Length > 0) chunks.Add(Wrap(current.ToString(), options.Voice));
         return chunks;
     }
 

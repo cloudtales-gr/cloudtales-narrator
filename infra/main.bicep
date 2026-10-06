@@ -1,7 +1,13 @@
-// CloudTales Narrator: every Azure resource for narrating blog posts with Azure Speech.
+// WordPress Narrator: every Azure resource for narrating blog posts with Azure AI Speech.
+// Site-specific values have no defaults; see infra/examples/ for a complete parameter file.
 // Zero keys by design: no account keys, no connection-string secrets, no API keys anywhere.
 // Every service-to-service call is authenticated with Microsoft Entra ID.
 targetScope = 'resourceGroup'
+
+@description('Prefix for resource names: func-<prefix>-<suffix>, appi-<prefix>-<suffix>, ...')
+@minLength(3)
+@maxLength(30)
+param namePrefix string = 'narrator'
 
 @description('Azure region for all resources. The voice must be available here.')
 param location string = resourceGroup().location
@@ -19,11 +25,17 @@ param audioStorageAccountName string = 'staudio${uniqueString(resourceGroup().id
 @description('Neural voice used for narration.')
 param voice string = 'en-US-Andrew:DragonHDLatestNeural'
 
-@description('Base URL of the WordPress site whose posts are narrated.')
-param wordPressBaseUrl string = 'https://cloudtales.gr/'
+@description('Base URL of the WordPress site whose posts are narrated, with a trailing slash. Example: https://example.com/')
+param wordPressBaseUrl string
 
-@description('Hosts allowed to play the audio (checked against Referer/Origin).')
-param allowedAudioHosts string = 'cloudtales.gr,www.cloudtales.gr'
+@description('Comma-separated hosts allowed to play the audio (checked against Referer/Origin). Example: example.com,www.example.com')
+param allowedAudioHosts string
+
+@description('Site name spoken in the intro: "This is the audio version of this <siteName> article."')
+param siteName string
+
+@description('Site address as it should be read aloud in the outro. Example: example dot com')
+param spokenAddress string
 
 @description('Cost guardrail: maximum articles queued for synthesis per day.')
 @minValue(1)
@@ -33,7 +45,7 @@ param maxSynthesesPerRun int = 3
 param developerPrincipalId string = ''
 
 var suffix = uniqueString(resourceGroup().id)
-var functionAppName = 'func-cloudtales-narrator-${suffix}'
+var functionAppName = 'func-${namePrefix}-${suffix}'
 var hostStorageName = 'stnarr${suffix}'
 var deploymentContainerName = 'app-package'
 
@@ -123,7 +135,7 @@ resource hostStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 // ---------- Monitoring: Entra ID ingestion only ----------
 
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: 'log-cloudtales-narrator-${suffix}'
+  name: 'log-${namePrefix}-${suffix}'
   location: location
   properties: {
     sku: { name: 'PerGB2018' }
@@ -132,7 +144,7 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 }
 
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: 'appi-cloudtales-narrator-${suffix}'
+  name: 'appi-${namePrefix}-${suffix}'
   location: location
   kind: 'web'
   properties: {
@@ -145,7 +157,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 // ---------- Flex Consumption plan and Function App ----------
 
 resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
-  name: 'asp-cloudtales-narrator-${suffix}'
+  name: 'asp-${namePrefix}-${suffix}'
   location: location
   kind: 'functionapp'
   sku: {
@@ -204,6 +216,8 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Narrator__MaxSynthesesPerRun', value: string(maxSynthesesPerRun) }
         { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
         { name: 'WordPress__BaseUrl', value: wordPressBaseUrl }
+        { name: 'Narrator__SiteName', value: siteName }
+        { name: 'Narrator__SpokenAddress', value: spokenAddress }
       ]
     }
   }

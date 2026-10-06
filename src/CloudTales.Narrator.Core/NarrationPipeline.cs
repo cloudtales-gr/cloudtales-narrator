@@ -15,11 +15,11 @@ public sealed record NarrationResult(
     Article Article, NarrationOutcome Outcome, int Chunks, Uri AudioUrl, TimeSpan? Duration);
 
 /// <summary>Article → SSML → (cache check) → speech → Blob Storage. Shared by the CLI and the Function.</summary>
-public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator, string voice)
+public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator, SsmlOptions ssml)
 {
     /// <summary>Builds the SSML chunks for an article without calling any Azure service.</summary>
     public IReadOnlyList<string> BuildSsml(Article article) =>
-        SsmlBuilder.Build(article.Title, ArticleParser.Parse(article.Html), voice);
+        SsmlBuilder.Build(article.Title, ArticleParser.Parse(article.Html), ssml);
 
     /// <summary>True when the stored audio is missing or was built from different SSML. No Speech cost.</summary>
     public async Task<bool> NeedsSynthesisAsync(Article article, CancellationToken ct = default) =>

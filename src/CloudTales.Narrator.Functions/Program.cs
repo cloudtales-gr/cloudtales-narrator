@@ -8,13 +8,21 @@ using Microsoft.Extensions.Hosting;
 var builder = FunctionsApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
-// App settings use "__" as separator (Speech__ResourceId) → read here as "Speech:ResourceId"
+// App settings use "__" as separator (Speech__ResourceId) and are read here as "Speech:ResourceId".
+// Site-specific settings have no defaults: a missing one stops the host at startup, not mid-run.
+var wordPressBaseUrl = Required(config, "WordPress:BaseUrl");
+_ = Required(config, "Audio:AllowedHosts"); // read by GetAudio on each request
+var ssml = new SsmlOptions(
+    Voice: config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural",
+    SiteName: Required(config, "Narrator:SiteName"),
+    SpokenAddress: Required(config, "Narrator:SpokenAddress"));
+
 builder.Services.AddSingleton<TokenCredential>(_ => NarratorCredential.Create());
 
 builder.Services.AddHttpClient<WordPressClient>(http =>
 {
-    http.BaseAddress = new Uri(config["WordPress:BaseUrl"] ?? "https://cloudtales.gr/");
-    http.DefaultRequestHeaders.UserAgent.ParseAdd("CloudTales-Narrator/0.3");
+    http.BaseAddress = new Uri(wordPressBaseUrl);
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("WordPress-Narrator/1.0");
 });
 
 builder.Services.AddSingleton(sp => new AudioStore(
@@ -24,14 +32,16 @@ builder.Services.AddSingleton(sp => new AudioStore(
 builder.Services.AddSingleton(sp => new SpeechNarrator(
     sp.GetRequiredService<TokenCredential>(),
     Required(config, "Speech:ResourceId"),
-    config["Speech:Region"] ?? "westeurope"));
+    Required(config, "Speech:Region")));
 
 builder.Services.AddSingleton(sp => new NarrationPipeline(
     sp.GetRequiredService<AudioStore>(),
     sp.GetRequiredService<SpeechNarrator>(),
-    config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural"));
+    ssml));
 
 builder.Build().Run();
 
 static string Required(IConfiguration config, string key) =>
-    config[key] ?? throw new InvalidOperationException($"Missing app setting '{key.Replace(":", "__")}'.");
+    config[key] is { Length: > 0 } value
+        ? value
+        : throw new InvalidOperationException($"Missing app setting '{key.Replace(":", "__")}'.");

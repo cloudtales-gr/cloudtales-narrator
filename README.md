@@ -1,6 +1,6 @@
 # CloudTales Narrator
 
-Turns every post on [cloudtales.gr](https://cloudtales.gr) into natural-sounding audio with Azure AI Speech, and plays it back only on the blog.
+Turns every post on a WordPress site into natural-sounding audio with Azure AI Speech, and plays it back only on that site. It runs in production on [cloudtales.gr](https://cloudtales.gr), where every article has a "Listen to this article" player.
 
 It is also a reference for a **zero-key architecture** on Azure: no storage account keys, no Speech API keys, no Application Insights instrumentation secrets, no connection strings with credentials. Every call between components is authenticated with Microsoft Entra ID, and the keys that would otherwise exist are **disabled at the resource level**, not just unused.
 
@@ -17,7 +17,7 @@ flowchart LR
     Q[("narration-requests<br/>queue")]
     S["Azure AI Speech<br/>local auth disabled"]
     B[("Audio storage<br/>private, no shared keys")]
-    R["Reader's browser<br/>on cloudtales.gr"]
+    R["Reader's browser<br/>on the blog"]
 
     T -->|"reads posts"| WP
     T -->|"hash check"| B
@@ -62,32 +62,64 @@ deploy.ps1                           build and zip-deploy the Function App
 
 Prerequisites: .NET 10 SDK, Azure CLI, a resource group, and *Owner* (or *User Access Administrator*) on it for the role assignments.
 
+**1. Parameters.** Copy the working example and change every value:
+
 ```powershell
-# 1. Infrastructure. developerPrincipalId is optional: it grants your user access for the CLI.
-az deployment group create -g <resource-group> -n main -f infra/main.bicep `
-  -p wordPressBaseUrl="https://yourblog.com/" allowedAudioHosts="yourblog.com,www.yourblog.com" `
-     developerPrincipalId=$(az ad signed-in-user show --query id -o tsv)
+Copy-Item infra/examples/cloudtales.bicepparam infra/examples/mysite.bicepparam
+```
 
-# 2. Code
+| Parameter | Example | Notes |
+|---|---|---|
+| `namePrefix` | `mysite-narrator` | Resource names become `func-<prefix>-<suffix>`, `appi-<prefix>-<suffix>`, ... |
+| `speechAccountName` | `mysite-speech` | Also the Speech custom subdomain, so it must be globally unique. Omit for a generated name. |
+| `audioStorageAccountName` | `stmysiteaudio` | 3-24 lowercase letters and digits. Omit for a generated name. |
+| `wordPressBaseUrl` | `https://example.com/` | With the trailing slash. |
+| `allowedAudioHosts` | `example.com,www.example.com` | Only pages on these hosts can play the audio. |
+| `siteName` | `Example` | Spoken in the intro of every narration. |
+| `spokenAddress` | `example dot com` | Spoken in the outro of every narration. |
+
+`siteName` and `spokenAddress` are part of the SSML, so they are part of its hash: changing them later re-synthesizes every post. Pick them once.
+
+**2. Infrastructure.** `developerPrincipalId` is optional and grants your own user the data roles the CLI needs.
+
+```powershell
+az deployment group create -g <resource-group> -n main -p infra/examples/mysite.bicepparam `
+  -p developerPrincipalId=$(az ad signed-in-user show --query id -o tsv)
+```
+
+**3. Code.**
+
+```powershell
 .\deploy.ps1 -ResourceGroup <resource-group>
+```
 
-# 3. First run without waiting for 04:00 UTC
+**4. First run** without waiting for 04:00 UTC:
+
+```powershell
 $app = az deployment group show -g <resource-group> -n main --query properties.outputs.functionAppName.value -o tsv
 $key = az functionapp keys list -g <resource-group> -n $app --query masterKey -o tsv
 Invoke-WebRequest -Method Post -Uri "https://$app.azurewebsites.net/admin/functions/EnqueueChangedArticles" `
   -Headers @{ "x-functions-key" = $key } -ContentType "application/json" -Body "{}" -UseBasicParsing
 ```
 
-4. **WordPress.** Add `wordpress/narrator-player.php` as a PHP snippet (for example with the Code Snippets plugin), set `CT_NARRATOR_AUDIO_BASE` to the `audioEndpoint` deployment output, and paste `wordpress/narrator-player.css` into Additional CSS.
+**5. WordPress.** Add `wordpress/narrator-player.php` as a PHP snippet (for example with the Code Snippets plugin), set `CT_NARRATOR_AUDIO_BASE` to the `audioEndpoint` deployment output, and paste `wordpress/narrator-player.css` into Additional CSS.
 
 ### Run locally
 
+The CLI reads the same settings from user secrets. Values come from the deployment outputs and your parameter file.
+
 ```powershell
 cd src/CloudTales.Narrator.Cli
-dotnet user-secrets set "Speech:ResourceId" "<speechResourceId output>"
-dotnet user-secrets set "Storage:BlobEndpoint" "<audioBlobEndpoint output>"
+dotnet user-secrets set "WordPress:BaseUrl"       "https://example.com/"
+dotnet user-secrets set "Narrator:SiteName"       "Example"
+dotnet user-secrets set "Narrator:SpokenAddress"  "example dot com"
+dotnet user-secrets set "Speech:ResourceId"       "<speechResourceId output>"
+dotnet user-secrets set "Speech:Region"           "<region>"
+dotnet user-secrets set "Storage:BlobEndpoint"    "<audioBlobEndpoint output>"
+
 dotnet run -- --slug <post-slug> --dryRun true   # writes the SSML only, no Azure calls
-dotnet run -- --slug <post-slug>                 # synthesizes and uploads
+dotnet run -- --slug <post-slug> --check true    # compares hashes with stored audio, no Speech cost
+dotnet run -- --slug <post-slug>                 # synthesizes and uploads if the post changed
 ```
 
 ## Cost

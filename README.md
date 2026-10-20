@@ -73,7 +73,8 @@ Copy-Item infra/examples/cloudtales.bicepparam infra/examples/mysite.bicepparam
 | `namePrefix` | `mysite-narrator` | Resource names become `func-<prefix>-<suffix>`, `appi-<prefix>-<suffix>`, ... |
 | `speechAccountName` | `mysite-speech` | Also the Speech custom subdomain, so it must be globally unique. Omit for a generated name. |
 | `audioStorageAccountName` | `stmysiteaudio` | 3-24 lowercase letters and digits. Omit for a generated name. |
-| `wordPressBaseUrl` | `https://example.com/` | With the trailing slash. |
+| `wordPressBaseUrl` | `https://example.com/` | With the trailing slash. Not needed with `siteFeedUrl`. |
+| `siteFeedUrl` | `https://example.com/narration.json` | Static site instead of WordPress: a JSON feed `{"posts":[{"slug","title","modified","html"}]}`. Wins over `wordPressBaseUrl`. |
 | `allowedAudioHosts` | `example.com,www.example.com` | Only pages on these hosts can play the audio. |
 | `siteName` | `Example` | Spoken in the intro of every narration. |
 | `spokenAddress` | `example dot com` | Spoken in the outro of every narration. |

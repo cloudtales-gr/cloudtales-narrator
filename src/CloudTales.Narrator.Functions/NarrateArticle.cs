@@ -10,14 +10,14 @@ namespace CloudTales.Narrator.Functions;
 /// Re-processing is safe: the SSML hash check skips posts that already have current audio.
 /// </summary>
 public sealed class NarrateArticle(
-    WordPressClient wordPress,
+    IArticleSource articles,
     NarrationPipeline pipeline,
     ILogger<NarrateArticle> logger)
 {
     [Function(nameof(NarrateArticle))]
     public async Task RunAsync([QueueTrigger(EnqueueChangedArticles.QueueName)] string slug, CancellationToken ct)
     {
-        var article = await wordPress.GetBySlugAsync(slug, ct);
+        var article = await articles.GetBySlugAsync(slug, ct);
         if (article is null)
         {
             logger.LogWarning("Post {Slug} no longer exists; nothing to narrate", slug);

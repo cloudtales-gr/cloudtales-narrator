@@ -10,7 +10,7 @@ var config = new ConfigurationBuilder()
     .AddCommandLine(args)
     .Build();
 
-var slug = (config["slug"] ?? throw new ArgumentException("Missing --slug <wordpress-post-slug>."))
+var slug = (config["slug"] ?? throw new ArgumentException("Missing --slug <post-slug>."))
     .TrimEnd('/').Split('/')[^1];
 var dryRun = Flag("dryRun");
 var check = Flag("check");
@@ -21,10 +21,16 @@ var ssml = new SsmlOptions(
     SiteName: Required("Narrator:SiteName"),
     SpokenAddress: Required("Narrator:SpokenAddress"));
 
-using var http = new HttpClient { BaseAddress = new Uri(Required("WordPress:BaseUrl")) };
-http.DefaultRequestHeaders.UserAgent.ParseAdd("WordPress-Narrator/1.0");
+// Article source: Site:FeedUrl (static site JSON feed) wins over WordPress:BaseUrl
+var feedUrl = config["Site:FeedUrl"];
+using var http = new HttpClient
+{
+    BaseAddress = new Uri(feedUrl is { Length: > 0 } ? feedUrl : Required("WordPress:BaseUrl"))
+};
+http.DefaultRequestHeaders.UserAgent.ParseAdd("CloudTales-Narrator/1.0");
+IArticleSource source = feedUrl is { Length: > 0 } ? new HugoFeedClient(http) : new WordPressClient(http);
 
-var article = await new WordPressClient(http).GetBySlugAsync(slug)
+var article = await source.GetBySlugAsync(slug)
     ?? throw new InvalidOperationException($"No post found with slug '{slug}'.");
 
 var credential = NarratorCredential.Create();
@@ -37,7 +43,7 @@ var chunks = pipeline.BuildSsml(article);
 var ssmlPath = Path.GetFullPath($"{slug}.ssml.txt");
 await File.WriteAllTextAsync(ssmlPath, string.Join("\n\n<!-- ===== next chunk ===== -->\n\n", chunks));
 
-Console.WriteLine($"Post {article.Id} '{article.Title}': {chunks.Count} chunk(s), {chunks.Sum(c => c.Length)} SSML characters");
+Console.WriteLine($"Post {article.Slug} '{article.Title}': {chunks.Count} chunk(s), {chunks.Sum(c => c.Length)} SSML characters");
 Console.WriteLine($"SSML written to {ssmlPath}");
 
 if (dryRun)

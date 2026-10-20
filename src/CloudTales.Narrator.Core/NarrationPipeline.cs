@@ -25,6 +25,13 @@ public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator,
     public async Task<bool> NeedsSynthesisAsync(Article article, CancellationToken ct = default) =>
         await store.FindCurrentAsync(article.Slug, AudioStore.ComputeHash(BuildSsml(article)), ct) is null;
 
+    /// <summary>
+    /// Marks existing audio as current for the article's present SSML, without synthesis (no Speech cost).
+    /// Returns false when the article has no audio yet.
+    /// </summary>
+    public Task<bool> AdoptExistingAsync(Article article, CancellationToken ct = default) =>
+        store.AdoptAsync(article.Slug, AudioStore.ComputeHash(BuildSsml(article)), ct);
+
     /// <summary>Synthesizes and uploads the article unless identical audio is already stored.</summary>
     public async Task<NarrationResult> ProcessAsync(Article article, bool force = false, CancellationToken ct = default)
     {

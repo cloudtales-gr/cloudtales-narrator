@@ -52,6 +52,26 @@ public sealed class AudioStore
         }
     }
 
+    /// <summary>
+    /// Re-tags the stored audio with a new SSML hash, without touching the MP3. For a one-off switch of
+    /// article source (same text, different HTML). Returns false when no audio exists for the slug.
+    /// </summary>
+    public async Task<bool> AdoptAsync(string slug, string hash, CancellationToken ct = default)
+    {
+        var blob = _container.GetBlobClient(BlobName(slug));
+        try
+        {
+            var props = (await blob.GetPropertiesAsync(cancellationToken: ct)).Value;
+            var metadata = new Dictionary<string, string>(props.Metadata) { [HashKey] = hash };
+            await blob.SetMetadataAsync(metadata, new BlobRequestConditions { IfMatch = props.ETag }, ct);
+            return true;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Uploads (overwrites) the MP3 for a slug and records the SSML hash.</summary>
     public async Task<Uri> UploadAsync(string slug, string hash, Stream audio, CancellationToken ct = default)
     {

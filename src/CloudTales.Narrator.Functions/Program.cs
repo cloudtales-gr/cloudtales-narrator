@@ -10,7 +10,11 @@ var config = builder.Configuration;
 
 // App settings use "__" as separator (Speech__ResourceId) and are read here as "Speech:ResourceId".
 // Site-specific settings have no defaults: a missing one stops the host at startup, not mid-run.
-var wordPressBaseUrl = Required(config, "WordPress:BaseUrl");
+// Article source: a static site's JSON feed (Site__FeedUrl) wins over the WordPress REST API (WordPress__BaseUrl)
+var feedUrl = config["Site:FeedUrl"];
+var wordPressBaseUrl = config["WordPress:BaseUrl"];
+if (string.IsNullOrEmpty(feedUrl) && string.IsNullOrEmpty(wordPressBaseUrl))
+    throw new InvalidOperationException("Missing app setting: set 'Site__FeedUrl' (static site feed) or 'WordPress__BaseUrl'.");
 _ = Required(config, "Audio:AllowedHosts"); // read by GetAudio on each request
 var ssml = new SsmlOptions(
     Voice: config["Speech:Voice"] ?? "en-US-Andrew:DragonHDLatestNeural",
@@ -19,11 +23,22 @@ var ssml = new SsmlOptions(
 
 builder.Services.AddSingleton<TokenCredential>(_ => NarratorCredential.Create());
 
-builder.Services.AddHttpClient<WordPressClient>(http =>
+if (!string.IsNullOrEmpty(feedUrl))
 {
-    http.BaseAddress = new Uri(wordPressBaseUrl);
-    http.DefaultRequestHeaders.UserAgent.ParseAdd("WordPress-Narrator/1.0");
-});
+    builder.Services.AddHttpClient<IArticleSource, HugoFeedClient>(http =>
+    {
+        http.BaseAddress = new Uri(feedUrl);
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("CloudTales-Narrator/1.0");
+    });
+}
+else
+{
+    builder.Services.AddHttpClient<IArticleSource, WordPressClient>(http =>
+    {
+        http.BaseAddress = new Uri(wordPressBaseUrl!);
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("WordPress-Narrator/1.0");
+    });
+}
 
 builder.Services.AddSingleton(sp => new AudioStore(
     new Uri(Required(config, "Storage:BlobEndpoint")),

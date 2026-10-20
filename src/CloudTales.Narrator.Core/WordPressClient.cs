@@ -5,13 +5,10 @@ using HtmlAgilityPack;
 
 namespace CloudTales.Narrator.Core;
 
-/// <summary>A published post, with the title already decoded to plain text.</summary>
-public sealed record Article(int Id, string Slug, string Title, string Html, DateTime Modified);
-
 /// <summary>Reads published posts from the WordPress REST API (no authentication needed).</summary>
-public sealed class WordPressClient(HttpClient http)
+public sealed class WordPressClient(HttpClient http) : IArticleSource
 {
-    private const string Fields = "id,slug,title,content,modified";
+    private const string Fields = "slug,title,content,modified";
     private const int PageSize = 50;
 
     /// <summary>Returns the post with this slug, or null if none exists.</summary>
@@ -44,8 +41,8 @@ public sealed class WordPressClient(HttpClient http)
     }
 
     private static Article ToArticle(WpPost p) =>
-        new(p.Id, p.Slug, HtmlEntity.DeEntitize(p.Title.Rendered).Trim(), p.Content.Rendered, p.Modified);
+        new(p.Slug, HtmlEntity.DeEntitize(p.Title.Rendered).Trim(), p.Content.Rendered, p.Modified);
 
-    private sealed record WpPost(int Id, string Slug, WpRendered Title, WpRendered Content, DateTime Modified);
+    private sealed record WpPost(string Slug, WpRendered Title, WpRendered Content, DateTime Modified);
     private sealed record WpRendered(string Rendered);
 }

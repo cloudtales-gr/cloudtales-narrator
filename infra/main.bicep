@@ -25,8 +25,11 @@ param audioStorageAccountName string = 'staudio${uniqueString(resourceGroup().id
 @description('Neural voice used for narration.')
 param voice string = 'en-US-Andrew:DragonHDLatestNeural'
 
-@description('Base URL of the WordPress site whose posts are narrated, with a trailing slash. Example: https://example.com/')
-param wordPressBaseUrl string
+@description('Base URL of the WordPress site whose posts are narrated, with a trailing slash. Example: https://example.com/. Not needed when siteFeedUrl is set.')
+param wordPressBaseUrl string = ''
+
+@description('JSON feed of a static site (for example Hugo /narration.json). Takes precedence over wordPressBaseUrl. Example: https://example.com/narration.json')
+param siteFeedUrl string = ''
 
 @description('Comma-separated hosts allowed to play the audio (checked against Referer/Origin). Example: example.com,www.example.com')
 param allowedAudioHosts string
@@ -216,6 +219,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Narrator__MaxSynthesesPerRun', value: string(maxSynthesesPerRun) }
         { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
         { name: 'WordPress__BaseUrl', value: wordPressBaseUrl }
+        { name: 'Site__FeedUrl', value: siteFeedUrl }
         { name: 'Narrator__SiteName', value: siteName }
         { name: 'Narrator__SpokenAddress', value: spokenAddress }
       ]

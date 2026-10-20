@@ -38,7 +38,8 @@ public static partial class ArticleParser
             // Anything inside a code block or table is covered by the container's announcement
             if (IsInside(node, "pre", "table")) continue;
 
-            if (node.Name is "pre") { AddOmitted(blocks, "code example"); continue; }
+            // Mermaid source (<pre class="mermaid">) is a diagram on the page, not code
+            if (node.Name is "pre") { AddOmitted(blocks, node.HasClass("mermaid") ? "diagram" : "code example"); continue; }
             if (node.Name is "table") { AddOmitted(blocks, "table"); continue; }
 
             // A list item that wraps paragraphs: read the paragraphs, not the item, to avoid duplicates

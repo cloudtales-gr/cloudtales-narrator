@@ -11,7 +11,10 @@
   },
   "logging": {
     "logLevel": {
-      "default": "Information"
+      "default": "Information",
+      "Azure.Identity": "Warning",
+      "Azure.Core": "Warning",
+      "Microsoft.AspNetCore": "Warning"
     }
   }
 }

@@ -48,7 +48,21 @@ finally {
     $zip.Dispose()
 }
 
-az functionapp deployment source config-zip -g $ResourceGroup -n $FunctionApp --src $zipPath
-if ($LASTEXITCODE -ne 0) { throw "Deployment failed" }
+# Flex Consumption runs the package from its deployment container. Uploading it there and restarting is
+# the same thing the deployment API does, without the SCM endpoint (which failed through some networks).
+# Needs Storage Blob Data Contributor on the host storage account for the signed-in user.
+$deployStorage = az resource show -g $ResourceGroup -n $FunctionApp --resource-type Microsoft.Web/sites `
+    --query properties.functionAppConfig.deployment.storage.value -o tsv
+if (-not $deployStorage) { throw "Deployment storage not found: is $FunctionApp a Flex Consumption app?" }
+$deployUri = [Uri]$deployStorage
+$account   = $deployUri.Host.Split('.')[0]
+$container = $deployUri.AbsolutePath.Trim('/')
+
+az storage blob upload --account-name $account -c $container -n released-package.zip -f $zipPath `
+    --auth-mode login --overwrite --only-show-errors -o none
+if ($LASTEXITCODE -ne 0) { throw "Package upload failed" }
+
+az functionapp restart -g $ResourceGroup -n $FunctionApp
+if ($LASTEXITCODE -ne 0) { throw "Restart failed" }
 
 Write-Host "Deployed to https://$FunctionApp.azurewebsites.net" -ForegroundColor Green

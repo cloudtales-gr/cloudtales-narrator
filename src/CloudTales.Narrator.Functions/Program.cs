@@ -42,6 +42,9 @@ else
     });
 }
 
+// Contact form mail (Microsoft Graph with the managed identity); used only when Contact__* settings exist
+builder.Services.AddHttpClient<GraphMailer>();
+
 builder.Services.AddSingleton(sp => new AudioStore(
     new Uri(Required(config, "Storage:BlobEndpoint")),
     sp.GetRequiredService<TokenCredential>()));

@@ -45,6 +45,12 @@ With `Site__FeedUrl`, the site's JSON feed can also carry a `podcast` section (t
 
 The blog serves `/podcast.xml` as a 302 to the Function, so the public feed URL stays on the blog's own domain. New narrations appear in the feed on their own, without rebuilding the site.
 
+## Contact form (optional)
+
+`POST /api/contact` emails a contact-form message through Microsoft Graph as one mailbox, with the Function's managed identity: no client secret, no SMTP password. It stays disabled (404) until three settings exist: `Contact__Sender` (a shared mailbox, e.g. `contact@example.com`), `Contact__Recipient` and `Contact__AllowedOrigins` (e.g. `https://example.com,https://www.example.com`), plus the same origins in the Function App's CORS list.
+
+The identity gets no tenant-wide `Mail.Send`. Exchange Online RBAC for Applications grants the *Application Mail.Send* role scoped to the sender mailbox only (`New-ServicePrincipal`, `New-ManagementScope`, `New-ManagementRoleAssignment -App ... -CustomResourceScope ...`). Spam defences need no third party: Origin allow list, a honeypot field, a minimum fill time and a per-IP rate limit. Message content is mailed, never logged.
+
 ## The zero-key model
 
 | Connection | Authentication | Key that would normally exist | Status |

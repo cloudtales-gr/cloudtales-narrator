@@ -52,6 +52,20 @@ public sealed class AudioStore
         }
     }
 
+    /// <summary>Size and date of the stored MP3 for a slug, or null if there is none.</summary>
+    public async Task<AudioInfo?> GetInfoAsync(string slug, CancellationToken ct = default)
+    {
+        try
+        {
+            var props = (await _container.GetBlobClient(BlobName(slug)).GetPropertiesAsync(cancellationToken: ct)).Value;
+            return new AudioInfo(props.ContentLength, props.LastModified);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Re-tags the stored audio with a new SSML hash, without touching the MP3. For a one-off switch of
     /// article source (same text, different HTML). Returns false when no audio exists for the slug.

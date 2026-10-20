@@ -25,11 +25,13 @@ builder.Services.AddSingleton<TokenCredential>(_ => NarratorCredential.Create())
 
 if (!string.IsNullOrEmpty(feedUrl))
 {
-    builder.Services.AddHttpClient<IArticleSource, HugoFeedClient>(http =>
+    // Registered as itself too: the podcast functions need the feed's podcast section
+    builder.Services.AddHttpClient<HugoFeedClient>(http =>
     {
         http.BaseAddress = new Uri(feedUrl);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("CloudTales-Narrator/1.0");
     });
+    builder.Services.AddTransient<IArticleSource>(sp => sp.GetRequiredService<HugoFeedClient>());
 }
 else
 {

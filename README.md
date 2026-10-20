@@ -34,6 +34,17 @@ flowchart LR
 2. **One post per execution.** `NarrateArticle` synthesizes a single post. Long posts are split into chunks under the real-time synthesis limit of 10 minutes of audio per request, synthesized in order and concatenated. Transient Speech errors are retried per chunk; anything else fails the message, which the platform retries and finally moves to the poison queue.
 3. **Private playback.** The container is private. The WordPress player points at `GetAudio`, which checks that the request comes from the blog and redirects to a read-only, HTTPS-only SAS link valid for two hours, signed with a user delegation key (Entra ID, not an account key).
 
+## Podcast feed (static site source)
+
+With `Site__FeedUrl`, the site's JSON feed can also carry a `podcast` section (title, description, author, email, category, language, image, link, feedUrl) and per post `url`, `summary` and `published`. Two more anonymous functions then turn the narrations into a podcast:
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/podcast.xml` | RSS 2.0 with iTunes and Podcasting 2.0 tags. One episode per post that already has audio; exact size from the blob, duration from the constant 96 kbit/s bitrate. Cached for 15 minutes. |
+| `GET /api/podcast/{slug}.mp3` | 302 to a 6-hour read-only user delegation SAS. No Referer check, because podcast apps send none. |
+
+The blog serves `/podcast.xml` as a 302 to the Function, so the public feed URL stays on the blog's own domain. New narrations appear in the feed on their own, without rebuilding the site.
+
 ## The zero-key model
 
 | Connection | Authentication | Key that would normally exist | Status |

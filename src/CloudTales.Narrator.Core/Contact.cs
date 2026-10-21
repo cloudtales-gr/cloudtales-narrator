@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Mail;
+using System.Text.Json.Nodes;
 using Azure.Core;
 
 namespace CloudTales.Narrator.Core;
@@ -54,17 +55,26 @@ public sealed class GraphMailer(HttpClient http, TokenCredential credential)
             m.Message.Trim() +
             "\n\n--\nSent from the contact form on cloudtales.gr. Reply to this email to answer the sender.";
 
-        var payload = new
+        await SendTextAsync(sender, recipient, $"[CloudTales] {(subject.Length > 0 ? subject : "Contact form")}", body,
+            replyTo: (m.Email.Trim(), name), ct);
+    }
+
+    /// <summary>Plain-text mail from <paramref name="sender"/> to <paramref name="recipient"/>, optionally with Reply-To.</summary>
+    public async Task SendTextAsync(string sender, string recipient, string subject, string body,
+        (string Address, string Name)? replyTo = null, CancellationToken ct = default)
+    {
+        var message = new JsonObject
         {
-            message = new
-            {
-                subject = $"[CloudTales] {(subject.Length > 0 ? subject : "Contact form")}",
-                body = new { contentType = "Text", content = body },
-                toRecipients = new[] { new { emailAddress = new { address = recipient } } },
-                replyTo = new[] { new { emailAddress = new { address = m.Email.Trim(), name } } }
-            },
-            saveToSentItems = false
+            ["subject"] = subject,
+            ["body"] = new JsonObject { ["contentType"] = "Text", ["content"] = body },
+            ["toRecipients"] = new JsonArray(new JsonObject { ["emailAddress"] = new JsonObject { ["address"] = recipient } })
         };
+        if (replyTo is { } r)
+            message["replyTo"] = new JsonArray(new JsonObject
+            {
+                ["emailAddress"] = new JsonObject { ["address"] = r.Address, ["name"] = r.Name }
+            });
+        var payload = new JsonObject { ["message"] = message, ["saveToSentItems"] = false };
 
         var token = await credential.GetTokenAsync(Scope, ct);
         using var request = new HttpRequestMessage(HttpMethod.Post,

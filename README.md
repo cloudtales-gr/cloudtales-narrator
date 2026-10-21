@@ -146,6 +146,7 @@ Speech is billed per character synthesized; everything else is close to zero at 
 
 - **Synthesis happens once per post version.** The SSML hash (which includes the voice name) decides whether a post needs audio; an unchanged post costs nothing on every later run.
 - **Daily cap** (`maxSynthesesPerRun`, default 3) bounds the worst case per day, including the initial backfill of an existing blog.
+- **Monthly budget** (`monthlyCharacterBudget`, app setting `Narrator__MonthlyCharacterBudget`, default 250,000 characters, 0 = no limit) bounds the worst case per month. Each synthesis reserves its billable characters first; when the month has no room left, the post is skipped without calling Speech and waits until the 1st. Usage is kept in one JSON blob per month (`usage/yyyy-MM.json` in the audio storage account). With the contact settings in place, one email goes out at 80% and one when the budget runs out.
 - **Per-chunk retries** avoid re-billing chunks that already succeeded when the service has a transient failure.
 - Rough guide: about 1 minute of audio per 1,000 characters. HD voices cost more per character than standard neural voices; check current [Speech pricing](https://azure.microsoft.com/pricing/details/cognitive-services/speech-services/).
 

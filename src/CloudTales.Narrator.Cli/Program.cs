@@ -64,6 +64,7 @@ var result = await pipeline.ProcessAsync(article, force);
 Console.WriteLine(result.Outcome switch
 {
     NarrationOutcome.Unchanged => $"Unchanged since last synthesis, skipping (no cost): {result.AudioUrl}",
+    NarrationOutcome.OverBudget => "Monthly Speech budget reached: not synthesized (no cost).",
     _ => $"Synthesized {result.Duration?.ToString(@"mm\:ss")} in {result.Chunks} chunk(s), uploaded: {result.AudioUrl}"
 });
 return 0;

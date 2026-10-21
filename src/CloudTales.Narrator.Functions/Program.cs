@@ -1,4 +1,5 @@
 using Azure.Core;
+using Azure.Storage.Blobs;
 using CloudTales.Narrator.Core;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
@@ -54,10 +55,20 @@ builder.Services.AddSingleton(sp => new SpeechNarrator(
     Required(config, "Speech:ResourceId"),
     Required(config, "Speech:Region")));
 
+// Monthly Speech budget in billable characters (Narrator__MonthlyCharacterBudget); 0 = no limit.
+// Usage is counted in the "usage" container of the audio storage account.
+const long DefaultMonthlyBudget = 250_000; // roughly 15-25 average articles a month
+var monthlyBudget = long.TryParse(config["Narrator:MonthlyCharacterBudget"], out var budget) ? budget : DefaultMonthlyBudget;
+builder.Services.AddSingleton(sp => new UsageMeter(
+    new BlobServiceClient(new Uri(Required(config, "Storage:BlobEndpoint")), sp.GetRequiredService<TokenCredential>())
+        .GetBlobContainerClient("usage"),
+    monthlyBudget));
+
 builder.Services.AddSingleton(sp => new NarrationPipeline(
     sp.GetRequiredService<AudioStore>(),
     sp.GetRequiredService<SpeechNarrator>(),
-    ssml));
+    ssml,
+    sp.GetRequiredService<UsageMeter>()));
 
 builder.Build().Run();
 

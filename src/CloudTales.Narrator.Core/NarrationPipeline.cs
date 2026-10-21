@@ -7,15 +7,21 @@ public enum NarrationOutcome
     Unchanged,
 
     /// <summary>Audio was synthesized and uploaded.</summary>
-    Synthesized
+    Synthesized,
+
+    /// <summary>Audio is stale or missing, but this month's Speech budget has no room: nothing was synthesized.</summary>
+    OverBudget
 }
 
 /// <summary>Result of processing one article.</summary>
 public sealed record NarrationResult(
-    Article Article, NarrationOutcome Outcome, int Chunks, Uri AudioUrl, TimeSpan? Duration);
+    Article Article, NarrationOutcome Outcome, int Chunks, Uri? AudioUrl, TimeSpan? Duration, UsageDecision? Usage = null);
 
-/// <summary>Article → SSML → (cache check) → speech → Blob Storage. Shared by the CLI and the Function.</summary>
-public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator, SsmlOptions ssml)
+/// <summary>
+/// Article → SSML → (cache check) → (monthly budget) → speech → Blob Storage. Shared by the CLI and the Function.
+/// Without a <see cref="UsageMeter"/> there is no monthly limit.
+/// </summary>
+public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator, SsmlOptions ssml, UsageMeter? meter = null)
 {
     /// <summary>Builds the SSML chunks for an article without calling any Azure service.</summary>
     public IReadOnlyList<string> BuildSsml(Article article) =>
@@ -41,11 +47,19 @@ public sealed class NarrationPipeline(AudioStore store, SpeechNarrator narrator,
         if (!force && await store.FindCurrentAsync(article.Slug, hash, ct) is { } existing)
             return new(article, NarrationOutcome.Unchanged, chunks.Count, existing, null);
 
+        UsageDecision? usage = null;
+        if (meter is not null)
+        {
+            usage = await meter.TryReserveAsync(UsageMeter.BillableCharacters(chunks), ct);
+            if (!usage.Allowed)
+                return new(article, NarrationOutcome.OverBudget, chunks.Count, null, null, usage);
+        }
+
         var (audio, duration) = await narrator.SynthesizeAsync(chunks, ct);
         await using (audio)
         {
             var url = await store.UploadAsync(article.Slug, hash, audio, ct);
-            return new(article, NarrationOutcome.Synthesized, chunks.Count, url, duration);
+            return new(article, NarrationOutcome.Synthesized, chunks.Count, url, duration, usage);
         }
     }
 }

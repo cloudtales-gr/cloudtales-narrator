@@ -12,10 +12,12 @@ namespace CloudTales.Narrator.Functions;
 /// With Narrator__AdoptExistingAudio=true, posts that already have audio are re-tagged with their new
 /// SSML hash instead of being queued: a one-off setting for switching the article source without paying
 /// to re-synthesize every post. Turn it off again after one run.
+/// When the monthly Speech budget is used up, nothing is queued until the next month.
 /// </summary>
 public sealed class EnqueueChangedArticles(
     IArticleSource articles,
     NarrationPipeline pipeline,
+    UsageMeter meter,
     IConfiguration config,
     ILogger<EnqueueChangedArticles> logger)
 {
@@ -28,6 +30,17 @@ public sealed class EnqueueChangedArticles(
     {
         var max = int.TryParse(config["Narrator:MaxSynthesesPerRun"], out var m) ? m : DefaultMaxPerDay;
         var adopt = bool.TryParse(config["Narrator:AdoptExistingAudio"], out var a) && a;
+        var usage = await meter.GetAsync(ct);
+        if (meter.Budget > 0)
+        {
+            logger.LogInformation("Speech budget {Month}: {Used}/{Budget} characters used", usage.Month, usage.Characters, meter.Budget);
+            if (usage.Characters >= meter.Budget && !adopt)
+            {
+                logger.LogWarning("Monthly Speech budget used up; nothing queued until next month");
+                return [];
+            }
+        }
+
         var queued = new List<string>();
         var checkedPosts = 0;
         var adopted = 0;

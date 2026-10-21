@@ -487,3 +487,4 @@ $RECYCLE.BIN/
 
 publish/
 publish.zip
+infra/examples/*-prod.bicepparam

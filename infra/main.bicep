@@ -40,6 +40,15 @@ param siteName string
 @description('Site address as it should be read aloud in the outro. Example: example dot com')
 param spokenAddress string
 
+@description('Optional contact form: shared mailbox the Function sends from (Exchange RBAC for Applications scoped to it). Empty = form disabled.')
+param contactSender string = ''
+
+@description('Optional contact form: where messages are delivered.')
+param contactRecipient string = ''
+
+@description('Optional contact form: comma-separated origins allowed to post, also added to CORS. Example: https://example.com,https://www.example.com')
+param contactAllowedOrigins string = ''
+
 @description('Cost guardrail: maximum articles queued for synthesis per day.')
 @minValue(1)
 param maxSynthesesPerRun int = 3
@@ -203,6 +212,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
     }
     siteConfig: {
       minTlsVersion: '1.2'
+      cors: { allowedOrigins: empty(contactAllowedOrigins) ? [] : split(contactAllowedOrigins, ',') }
       ftpsState: 'Disabled'
       appSettings: [
         // Host storage via managed identity (no connection string, no key)
@@ -220,6 +230,9 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
         { name: 'WordPress__BaseUrl', value: wordPressBaseUrl }
         { name: 'Site__FeedUrl', value: siteFeedUrl }
+        { name: 'Contact__Sender', value: contactSender }
+        { name: 'Contact__Recipient', value: contactRecipient }
+        { name: 'Contact__AllowedOrigins', value: contactAllowedOrigins }
         { name: 'Narrator__SiteName', value: siteName }
         { name: 'Narrator__SpokenAddress', value: spokenAddress }
       ]

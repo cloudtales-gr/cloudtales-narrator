@@ -27,7 +27,8 @@ public static class ContactValidator
         return null;
     }
 
-    private static bool IsEmail(string? value) =>
+    /// <summary>A single, plausible email address (no display name, a dot in the domain).</summary>
+    public static bool IsEmail(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length <= 254
         && MailAddress.TryCreate(value.Trim(), out var a) && a.Address == value.Trim() && a.Host.Contains('.');
 
@@ -60,13 +61,21 @@ public sealed class GraphMailer(HttpClient http, TokenCredential credential)
     }
 
     /// <summary>Plain-text mail from <paramref name="sender"/> to <paramref name="recipient"/>, optionally with Reply-To.</summary>
-    public async Task SendTextAsync(string sender, string recipient, string subject, string body,
-        (string Address, string Name)? replyTo = null, CancellationToken ct = default)
+    public Task SendTextAsync(string sender, string recipient, string subject, string body,
+        (string Address, string Name)? replyTo = null, CancellationToken ct = default) =>
+        SendMailAsync(sender, recipient, subject, body, "Text", replyTo, ct);
+
+    /// <summary>HTML mail from <paramref name="sender"/> to <paramref name="recipient"/>.</summary>
+    public Task SendHtmlAsync(string sender, string recipient, string subject, string html, CancellationToken ct = default) =>
+        SendMailAsync(sender, recipient, subject, html, "HTML", null, ct);
+
+    private async Task SendMailAsync(string sender, string recipient, string subject, string body, string contentType,
+        (string Address, string Name)? replyTo, CancellationToken ct)
     {
         var message = new JsonObject
         {
             ["subject"] = subject,
-            ["body"] = new JsonObject { ["contentType"] = "Text", ["content"] = body },
+            ["body"] = new JsonObject { ["contentType"] = contentType, ["content"] = body },
             ["toRecipients"] = new JsonArray(new JsonObject { ["emailAddress"] = new JsonObject { ["address"] = recipient } })
         };
         if (replyTo is { } r)

@@ -53,6 +53,9 @@ param contactAllowedOrigins string = ''
 @minValue(1)
 param maxSynthesesPerRun int = 3
 
+@description('Optional newsletter: public address of the site, used in the confirm and unsubscribe links (its /newsletter/ page handles them). Empty = newsletter disabled. Sends from contactSender.')
+param newsletterSiteUrl string = ''
+
 @description('Cost guardrail: Speech characters allowed per calendar month (UTC). Over it, nothing is synthesized until the 1st, and one email goes out (needs the contact settings). 0 = no limit.')
 @minValue(0)
 param monthlyCharacterBudget int = 250000
@@ -108,6 +111,14 @@ resource audioStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 
     resource audioContainer 'containers' = {
       name: 'audio'
+      properties: {
+        publicAccess: 'None'
+      }
+    }
+
+    // Newsletter subscribers (one JSON each) and send state
+    resource newsletterContainer 'containers' = {
+      name: 'newsletter'
       properties: {
         publicAccess: 'None'
       }
@@ -240,6 +251,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'Storage__BlobEndpoint', value: audioStorage.properties.primaryEndpoints.blob }
         { name: 'Narrator__MaxSynthesesPerRun', value: string(maxSynthesesPerRun) }
         { name: 'Narrator__MonthlyCharacterBudget', value: string(monthlyCharacterBudget) }
+        { name: 'Newsletter__SiteUrl', value: newsletterSiteUrl }
         { name: 'Audio__AllowedHosts', value: allowedAudioHosts }
         { name: 'WordPress__BaseUrl', value: wordPressBaseUrl }
         { name: 'Site__FeedUrl', value: siteFeedUrl }

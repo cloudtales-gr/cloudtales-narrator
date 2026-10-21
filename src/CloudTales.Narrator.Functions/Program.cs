@@ -64,6 +64,11 @@ builder.Services.AddSingleton(sp => new UsageMeter(
         .GetBlobContainerClient("usage"),
     monthlyBudget));
 
+// Newsletter subscribers and send state ("newsletter" container); active once Newsletter__SiteUrl is set
+builder.Services.AddSingleton(sp => new NewsletterStore(
+    new BlobServiceClient(new Uri(Required(config, "Storage:BlobEndpoint")), sp.GetRequiredService<TokenCredential>())
+        .GetBlobContainerClient("newsletter")));
+
 builder.Services.AddSingleton(sp => new NarrationPipeline(
     sp.GetRequiredService<AudioStore>(),
     sp.GetRequiredService<SpeechNarrator>(),

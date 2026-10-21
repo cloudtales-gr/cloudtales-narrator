@@ -51,6 +51,15 @@ The blog serves `/podcast.xml` as a 302 to the Function, so the public feed URL 
 
 The identity gets no tenant-wide `Mail.Send`. Exchange Online RBAC for Applications grants the *Application Mail.Send* role scoped to the sender mailbox only (`New-ServicePrincipal`, `New-ManagementScope`, `New-ManagementRoleAssignment -App ... -CustomResourceScope ...`). Spam defences need no third party: Origin allow list, a honeypot field, a minimum fill time and a per-IP rate limit. Message content is mailed, never logged.
 
+## Newsletter (optional)
+
+A small double opt-in newsletter without a third-party service: each new article is emailed to confirmed subscribers through Microsoft Graph, from the same mailbox as the contact form.
+
+- `POST /api/newsletter/subscribe`, `/confirm`, `/unsubscribe`. Confirm and unsubscribe are POSTs from the site's `/newsletter/` page (links in the emails open that page), because mail scanners follow GET links and would otherwise confirm or unsubscribe on the reader's behalf.
+- `NewsletterDispatch` runs hourly and mails articles published in the last 3 days that were not mailed yet; the first run marks the existing archive as sent. Progress is saved after every message, so a retry never sends twice. Paced under Exchange Online's 30 messages per minute.
+- Storage: one JSON per subscriber in the `newsletter` container (address, status, token, dates). Unsubscribing deletes it; unconfirmed sign-ups are deleted after 7 days. Addresses never reach the logs.
+- Enable with `newsletterSiteUrl` (app setting `Newsletter__SiteUrl`). Same Origin list, honeypot and rate limits as the contact form.
+
 ## The zero-key model
 
 | Connection | Authentication | Key that would normally exist | Status |

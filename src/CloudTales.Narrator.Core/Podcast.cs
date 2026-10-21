@@ -12,6 +12,13 @@ public sealed record PodcastShow(
 /// <summary>One article as a podcast episode (its audio is looked up separately).</summary>
 public sealed record PodcastEpisode(string Slug, string Title, string Url, string Summary, DateTime Published);
 
+/// <summary>An article or a recipe as the newsletter sees it.</summary>
+public sealed record SiteItem(string Slug, string Title, string Url, string Summary, DateTime Published, string Kind)
+{
+    public const string Article = "article", Recipe = "recipe";
+    public bool IsRecipe => Kind == Recipe;
+}
+
 /// <summary>Size and date of a stored narration MP3.</summary>
 public sealed record AudioInfo(long Bytes, DateTimeOffset LastModified);
 

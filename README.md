@@ -56,7 +56,7 @@ The identity gets no tenant-wide `Mail.Send`. Exchange Online RBAC for Applicati
 A small double opt-in newsletter without a third-party service: each new article is emailed to confirmed subscribers through Microsoft Graph, from the same mailbox as the contact form.
 
 - `POST /api/newsletter/subscribe`, `/confirm`, `/unsubscribe`. Confirm and unsubscribe are POSTs from the site's `/newsletter/` page (links in the emails open that page), because mail scanners follow GET links and would otherwise confirm or unsubscribe on the reader's behalf.
-- `NewsletterDispatch` runs hourly and mails articles published in the last 3 days that were not mailed yet; the first run marks the existing archive as sent. Progress is saved after every message, so a retry never sends twice. Paced under Exchange Online's 30 messages per minute.
+- `NewsletterDispatch` runs hourly and mails articles and recipes (`"kind": "recipe"` in the feed: mailed, never narrated) published in the last 3 days that were not mailed yet; the first run marks the existing archive as sent. Progress is saved after every message, so a retry never sends twice. Paced under Exchange Online's 30 messages per minute.
 - Storage: one JSON per subscriber in the `newsletter` container (address, status, token, dates). Unsubscribing deletes it; unconfirmed sign-ups are deleted after 7 days. Addresses never reach the logs.
 - Enable with `newsletterSiteUrl` (app setting `Newsletter__SiteUrl`). Same Origin list, honeypot and rate limits as the contact form.
 

@@ -121,24 +121,27 @@ public static class NewsletterMail
         return ($"Confirm your {siteName} subscription", Layout(siteName, siteUrl, "One click to confirm", body, footer: null));
     }
 
-    public static (string Subject, string Html) NewPost(string siteName, string siteUrl, PodcastEpisode post, NewsletterSubscriber s)
+    public static (string Subject, string Html) NewPost(string siteName, string siteUrl, SiteItem post, NewsletterSubscriber s)
     {
         var url = $"{post.Url}{(post.Url.Contains('?') ? '&' : '?')}utm_source=newsletter&utm_medium=email";
         var body =
             (post.Summary.Length > 0 ? P(E(Trim(post.Summary, 420))) : "") +
-            Button("Read the article", url) +
-            P("Prefer to listen? Every article has an audio version on the page.", muted: true);
+            Button(post.IsRecipe ? "Open the recipe" : "Read the article", url) +
+            P(post.IsRecipe
+                ? "A hands-on Azure recipe: the commands in PowerShell and Bash, the real output, and the code on GitHub."
+                : "Prefer to listen? Every article has an audio version on the page.", muted: true);
         var footer =
             $"You get this because you subscribed to {E(siteName)} at {E(s.Email)}. " +
             $"<a href=\"{E(UnsubscribeLink(siteUrl, s))}\" style=\"color:#6b6b6b;\">Unsubscribe</a> with one click.";
-        return (post.Title, Layout(siteName, siteUrl, post.Title, body, footer));
+        var subject = post.IsRecipe ? $"New recipe: {post.Title}" : post.Title;
+        return (subject, Layout(siteName, siteUrl, post.Title, body, footer, eyebrow: post.IsRecipe ? "Azure recipe" : null));
     }
 
-    private static string Layout(string siteName, string siteUrl, string heading, string body, string? footer) =>
+    private static string Layout(string siteName, string siteUrl, string heading, string body, string? footer, string? eyebrow = null) =>
         "<!doctype html><html><body style=\"margin:0;padding:0;background:#f4f4f2;\">" +
         "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f4f4f2;\"><tr><td align=\"center\" style=\"padding:24px 12px;\">" +
         "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:560px;background:#ffffff;border-top:3px solid " + Accent + ";\">" +
-        $"<tr><td style=\"padding:24px 28px 0;font:600 13px/1.4 Segoe UI,Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;\"><a href=\"{E(siteUrl)}\" style=\"color:{Accent};text-decoration:none;\">{E(siteName)}</a></td></tr>" +
+        $"<tr><td style=\"padding:24px 28px 0;font:600 13px/1.4 Segoe UI,Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;\"><a href=\"{E(siteUrl)}\" style=\"color:{Accent};text-decoration:none;\">{E(siteName)}</a>{(eyebrow is null ? "" : $"<span style=\"color:#6b6b6b;\"> · {E(eyebrow)}</span>")}</td></tr>" +
         $"<tr><td style=\"padding:8px 28px 0;font:700 22px/1.3 Segoe UI,Helvetica,Arial,sans-serif;color:#1a1a1a;\">{E(heading)}</td></tr>" +
         $"<tr><td style=\"padding:8px 28px 24px;\">{body}</td></tr>" +
         (footer is null ? "" : $"<tr><td style=\"padding:16px 28px 24px;border-top:1px solid #eeeeec;font:12px/1.5 Segoe UI,Helvetica,Arial,sans-serif;color:#6b6b6b;\">{footer}</td></tr>") +

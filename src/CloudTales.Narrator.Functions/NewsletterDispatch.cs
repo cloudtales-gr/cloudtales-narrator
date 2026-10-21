@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace CloudTales.Narrator.Functions;
 
 /// <summary>
-/// Hourly, seconds-long when there is nothing new: emails each newly published article to every confirmed
+/// Hourly, seconds-long when there is nothing new: emails each newly published article or recipe to every confirmed
 /// subscriber, one message per subscriber (each with its own unsubscribe link), through Microsoft Graph.
 /// <list type="bullet">
 /// <item>First run: records every existing article as already sent, so subscribers never get the archive.</item>
@@ -38,7 +38,7 @@ public sealed class NewsletterDispatch(
         var maxAgeDays = int.TryParse(config["Newsletter:MaxPostAgeDays"], out var d) ? d : 3;
 
         var started = DateTimeOffset.UtcNow;
-        var (_, posts) = await feed.GetPodcastAsync(ct);
+        var posts = await feed.GetSiteItemsAsync(ct);   // articles and recipes
         var subscribers = new List<NewsletterSubscriber>();
         var expired = 0;
         await foreach (var s in store.ListAsync(ct))

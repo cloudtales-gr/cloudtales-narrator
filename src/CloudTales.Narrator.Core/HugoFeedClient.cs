@@ -9,6 +9,8 @@ namespace CloudTales.Narrator.Core;
 /// <c>HttpClient.BaseAddress</c> is the feed URL; one request returns every post:
 /// <code>{"posts":[{"slug":"...","title":"...","modified":"2026-10-19T00:00:00Z","html":"&lt;p&gt;...&lt;/p&gt;"}]}</code>
 /// Optional fields feed the podcast: <c>podcast</c> (show details) and per post <c>url</c>, <c>summary</c>, <c>published</c>.
+/// <c>kind</c> is "article" (default) or "recipe": recipes are never narrated or put in the podcast,
+/// but the newsletter mails them like articles.
 /// </summary>
 public sealed class HugoFeedClient(HttpClient http) : IArticleSource
 {
@@ -31,10 +33,20 @@ public sealed class HugoFeedClient(HttpClient http) : IArticleSource
             : null;
 
         IReadOnlyList<PodcastEpisode> episodes = [.. feed.Posts
-            .Where(x => !string.IsNullOrWhiteSpace(x.Slug) && !string.IsNullOrWhiteSpace(x.Url))
+            .Where(x => !x.IsRecipe && !string.IsNullOrWhiteSpace(x.Slug) && !string.IsNullOrWhiteSpace(x.Url))
             .Select(x => new PodcastEpisode(x.Slug, HtmlEntity.DeEntitize(x.Title).Trim(), x.Url!,
                 x.Summary ?? "", x.Published ?? x.Modified))];
         return (show, episodes);
+    }
+
+    /// <summary>Everything the newsletter can mail: articles and recipes, each with its kind.</summary>
+    public async Task<IReadOnlyList<SiteItem>> GetSiteItemsAsync(CancellationToken ct = default)
+    {
+        var feed = await FetchAsync(ct);
+        return [.. feed.Posts
+            .Where(x => !string.IsNullOrWhiteSpace(x.Slug) && !string.IsNullOrWhiteSpace(x.Url))
+            .Select(x => new SiteItem(x.Slug, HtmlEntity.DeEntitize(x.Title).Trim(), x.Url!, x.Summary ?? "",
+                x.Published ?? x.Modified, x.IsRecipe ? SiteItem.Recipe : SiteItem.Article))];
     }
 
     private async Task<Feed> FetchAsync(CancellationToken ct) =>
@@ -46,13 +58,16 @@ public sealed class HugoFeedClient(HttpClient http) : IArticleSource
         var feed = await FetchAsync(ct);
 
         return [.. feed.Posts
-            .Where(p => !string.IsNullOrWhiteSpace(p.Slug) && !string.IsNullOrWhiteSpace(p.Html))
-            .Select(p => new Article(p.Slug, HtmlEntity.DeEntitize(p.Title).Trim(), p.Html, p.Modified))];
+            .Where(p => !p.IsRecipe && !string.IsNullOrWhiteSpace(p.Slug) && !string.IsNullOrWhiteSpace(p.Html))
+            .Select(p => new Article(p.Slug, HtmlEntity.DeEntitize(p.Title).Trim(), p.Html!, p.Modified))];
     }
 
     private sealed record Feed(FeedPost[] Posts, FeedPodcast? Podcast);
-    private sealed record FeedPost(string Slug, string Title, string Html, DateTime Modified,
-        string? Url, string? Summary, DateTime? Published);
+    private sealed record FeedPost(string Slug, string Title, string? Html, DateTime Modified,
+        string? Url, string? Summary, DateTime? Published, string? Kind)
+    {
+        public bool IsRecipe => string.Equals(Kind, SiteItem.Recipe, StringComparison.OrdinalIgnoreCase);
+    }
     private sealed record FeedPodcast(string? Title, string? Description, string? Author, string? Email,
         string? Category, string? Language, string? Image, string? Link, string? FeedUrl);
 }

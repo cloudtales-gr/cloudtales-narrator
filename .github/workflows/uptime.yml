@@ -1,0 +1,36 @@
+# Availability check for cloudtales.gr and the narrator Function App, every 10 minutes.
+# Free: this repository is public, so GitHub Actions minutes cost nothing, and it runs outside Azure,
+# so it still notices when Azure (or the Function App) is the thing that is down.
+# Alerts: a failed run is emailed by GitHub to whoever last changed this schedule
+# (GitHub > Settings > Notifications > Actions: "Email", "Only notify for failed workflows").
+# Note: GitHub pauses scheduled workflows in public repos after 60 days without commits; it emails a
+# warning first, and one click on "Enable workflow" (or any commit) turns it back on.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/uptime-check.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Check site, feeds, podcast, narrator and TLS certificate
+        env:
+          SITE: https://cloudtales.gr
+          FUNC: https://func-cloudtales-narrator-mtz7k2pugwphm.azurewebsites.net
+        run: bash tools/uptime-check.sh
